@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: azure-markdown-reviewer
+  labels:
+    app: azure-markdown-reviewer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: azure-markdown-reviewer
+  template:
+    metadata:
+      labels:
+        app: azure-markdown-reviewer
+    spec:
+      containers:
+        - name: app
+          image: ghcr.io/REPLACE_GITHUB_OWNER/azure-markdown-reviewer:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: azure-markdown-reviewer-config
+            - secretRef:
+                name: azure-markdown-reviewer-azure
+          readinessProbe:
+            httpGet: { path: /api/health, port: http }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /api/health, port: http }
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: 500m, memory: 512Mi }

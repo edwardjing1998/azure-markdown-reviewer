@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: azure-markdown-reviewer
+spec:
+  selector:
+    app: azure-markdown-reviewer
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: azure-markdown-reviewer
+spec:
+  to:
+    kind: Service
+    name: azure-markdown-reviewer
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

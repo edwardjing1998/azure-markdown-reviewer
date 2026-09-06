@@ -1,0 +1,26 @@
+{
+  "name": "azure-markdown-reviewer",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k \"vite\" \"node --watch server/index.mjs\"",
+    "build": "vite build",
+    "start": "node server/index.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@azure/identity": "^4.10.2",
+    "@azure/storage-blob": "^12.28.0",
+    "express": "^5.1.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.7.0",
+    "concurrently": "^9.2.1",
+    "vite": "^7.1.4"
+  }
+}
