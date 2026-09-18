@@ -23,7 +23,15 @@ app.post("/api/auth/login", async (req, res, next) => {
 });
 app.post("/api/auth/logout", (req, res) => { sessions.delete(String(req.headers.authorization || "").replace(/^Bearer\s+/i, "")); res.status(204).end(); });
 app.use((req, res, next) => {
-  if (req.path === "/api/health" || req.path === "/api/auth/login" || !req.path.startsWith("/api/")) return next();
+  if (
+    req.path === "/api/health" ||
+    req.path === "/api/auth/login" ||
+    req.path === "/api/blob" ||
+    req.path === "/api/source-blob" ||
+    !req.path.startsWith("/api/")
+  ) {
+    return next();
+  }
   const token = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
   return sessions.has(token) ? next() : res.status(401).json({ error: "Authentication required" });
 });
