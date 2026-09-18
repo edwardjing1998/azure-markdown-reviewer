@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import LayoutCanvas from "./LayoutCanvas.jsx";
-import { loadPage, loadPages, loadReviewFolders, loadReviewSessions, loadReviewUsers, login, logout } from "./api.js";
+import { loadPage, loadPages, loadReviewFolderContent, loadReviewFolders, loadReviewSessions, loadReviewUsers, login, logout } from "./api.js";
 
 function stripFrontMatter(markdown) { return markdown.replace(/^---\s*[\s\S]*?\n---\s*/m, ""); }
 function reviewKey(id) { return `markdown-review:${id}`; }
@@ -18,12 +18,9 @@ export default function App() {
   const [reviewFolders, setReviewFolders] = useState([]), [reviewFolder, setReviewFolder] = useState("");
   const [reviewLoading, setReviewLoading] = useState(false), [reviewError, setReviewError] = useState("");
   const [reviewSelected, setReviewSelected] = useState(0);
+  const [reviewContentPages, setReviewContentPages] = useState([]);
   const current = pages[selected];
-  const reviewPages = useMemo(() => {
-    if (!reviewFolder) return [];
-    const folder = reviewFolder.replace(/^\/+|\/+$/g, "");
-    return pages.filter(item => item.id === folder || item.id.startsWith(`${folder}/`) || item.id.includes(`/${folder}/`));
-  }, [pages, reviewFolder]);
+  const reviewPages = reviewContentPages;
   const activePages = tab === "uploads" ? reviewPages : pages;
   const activeSelected = tab === "uploads" ? reviewSelected : selected;
   const activeCurrent = activePages[activeSelected];
@@ -31,7 +28,14 @@ export default function App() {
   useEffect(() => { if (authenticated) loadReviewUsers().then(setReviewUsers).catch(e => setReviewError(e.message)); }, [authenticated]);
   useEffect(() => { if (!reviewUserId) { setReviewSessions([]); setReviewSessionId(""); return; } setReviewLoading(true); loadReviewSessions(reviewUserId).then(items => { setReviewSessions(items); setReviewSessionId(items[0]?.id || ""); }).catch(e => setReviewError(e.message)).finally(() => setReviewLoading(false)); }, [reviewUserId]);
   useEffect(() => { if (!reviewUserId || !reviewSessionId) { setReviewFolders([]); setReviewFolder(""); return; } setReviewLoading(true); loadReviewFolders(reviewUserId, reviewSessionId).then(result => { setReviewFolders(result.folders || []); setReviewFolder(result.folders?.[0] || ""); }).catch(e => setReviewError(e.message)).finally(() => setReviewLoading(false)); }, [reviewUserId, reviewSessionId]);
-  useEffect(() => { setReviewSelected(0); }, [reviewFolder]);
+  useEffect(() => {
+    if (!reviewUserId || !reviewSessionId || !reviewFolder) { setReviewContentPages([]); setReviewSelected(0); return; }
+    setReviewLoading(true); setReviewError("");
+    loadReviewFolderContent(reviewUserId, reviewSessionId, reviewFolder)
+      .then(result => { setReviewContentPages(result.pages || []); setReviewSelected(0); })
+      .catch(e => { setReviewContentPages([]); setReviewError(e.message); })
+      .finally(() => setReviewLoading(false));
+  }, [reviewUserId, reviewSessionId, reviewFolder]);
   useEffect(() => { if (!activeCurrent) { setPage(null); return; } setLoading(true); setError(""); loadPage(activeCurrent.markdownBlob).then(setPage).catch(e => setError(e.message)).finally(() => setLoading(false)); }, [activeCurrent?.markdownBlob]);
   const books = useMemo(() => [...new Set(pages.map(x => x.bookId))], [pages]);
   const chapters = useMemo(() => [...new Set(pages.filter(x => !current || x.bookId === current.bookId).map(x => x.chapterId))], [pages, current]);

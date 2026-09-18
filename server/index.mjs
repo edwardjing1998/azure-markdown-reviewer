@@ -80,6 +80,24 @@ app.get("/api/review/users/:userId/upload-sessions/:sessionId/folders", async (r
     res.json({ ...body, folders });
   } catch (error) { next(error); }
 });
+app.get("/api/review/users/:userId/upload-sessions/:sessionId/folder-content", async (req, res, next) => {
+  try {
+    const folder = String(req.query.folder || "").replace(/^\/+|\/+$/g, "");
+    if (!folder) throw Object.assign(new Error("Folder is required"), { statusCode: 400 });
+    const body = await securityJson(req, `/api/users/${encodeURIComponent(req.params.userId)}/upload-sessions/${encodeURIComponent(req.params.sessionId)}/folders`);
+    const normalize = value => String(value || "").replace(/^\/+/, "").replace(/^generated\//, "").replace(/^source\//, "");
+    const folderKey = normalize(folder);
+    const pages = [];
+    for (const candidate of await listPages()) {
+      const markdown = await downloadText(candidate.markdownBlob);
+      const sourceBlob = markdown.match(/^---[\s\S]*?^sourceBlob:\s*["']?([^"'\n]+)["']?\s*$/m)?.[1] || "";
+      const pageKey = normalize(candidate.id);
+      const sourceKey = normalize(sourceBlob);
+      if (pageKey === folderKey || pageKey.startsWith(`${folderKey}/`) || sourceKey === folderKey || sourceKey.startsWith(`${folderKey}/`)) pages.push(candidate);
+    }
+    res.json({ ...body, folder, pages });
+  } catch (error) { next(error); }
+});
 
 app.get("/api/page", async (req, res, next) => {
   try {

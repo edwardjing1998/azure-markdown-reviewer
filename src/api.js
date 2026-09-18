@@ -18,3 +18,4 @@ export const loadPage = markdownBlob => getJson(`/api/page?markdownBlob=${encode
 export const loadReviewUsers = () => getJson("/api/review/users");
 export const loadReviewSessions = userId => getJson(`/api/review/users/${encodeURIComponent(userId)}/upload-sessions`);
 export const loadReviewFolders = (userId, sessionId) => getJson(`/api/review/users/${encodeURIComponent(userId)}/upload-sessions/${encodeURIComponent(sessionId)}/folders`);
+export const loadReviewFolderContent = (userId, sessionId, folder) => getJson(`/api/review/users/${encodeURIComponent(userId)}/upload-sessions/${encodeURIComponent(sessionId)}/folder-content?folder=${encodeURIComponent(folder)}`);
