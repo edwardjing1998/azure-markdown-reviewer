@@ -2,16 +2,18 @@ import { useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import LayoutCanvas from "./LayoutCanvas.jsx";
-import { loadPage, loadPages } from "./api.js";
+import { loadPage, loadPages, login, logout } from "./api.js";
 
 function stripFrontMatter(markdown) { return markdown.replace(/^---\s*[\s\S]*?\n---\s*/m, ""); }
 function reviewKey(id) { return `markdown-review:${id}`; }
 
 export default function App() {
+  const [authenticated, setAuthenticated] = useState(Boolean(sessionStorage.getItem("reviewer_access_token")));
+  const [username, setUsername] = useState("admin"), [password, setPassword] = useState("ChangeMe123!"), [loginError, setLoginError] = useState("");
   const [pages, setPages] = useState([]), [selected, setSelected] = useState(0), [page, setPage] = useState(null);
   const [mode, setMode] = useState("compare"), [showBoxes, setShowBoxes] = useState(false), [loading, setLoading] = useState(true), [error, setError] = useState("");
   const current = pages[selected];
-  useEffect(() => { loadPages().then(x => setPages(x.pages)).catch(e => setError(e.message)).finally(() => setLoading(false)); }, []);
+  useEffect(() => { if (!authenticated) return; loadPages().then(x => setPages(x.pages)).catch(e => setError(e.message)).finally(() => setLoading(false)); }, [authenticated]);
   useEffect(() => { if (!current) return; setLoading(true); setError(""); loadPage(current.markdownBlob).then(setPage).catch(e => setError(e.message)).finally(() => setLoading(false)); }, [current?.markdownBlob]);
   const books = useMemo(() => [...new Set(pages.map(x => x.bookId))], [pages]);
   const chapters = useMemo(() => [...new Set(pages.filter(x => !current || x.bookId === current.bookId).map(x => x.chapterId))], [pages, current]);
@@ -25,10 +27,11 @@ export default function App() {
   function choose(book, chapter) { const index = pages.findIndex(x => x.bookId === book && (!chapter || x.chapterId === chapter)); if (index >= 0) setSelected(index); }
   function decide(value) { localStorage.setItem(reviewKey(current.id), JSON.stringify({ documentId: current.id, decision: value, reviewedAt: new Date().toISOString() })); setPage({ ...page }); }
   const decision = current ? JSON.parse(localStorage.getItem(reviewKey(current.id)) || "null") : null;
+  if (!authenticated) return <main className="center"><form className="error" onSubmit={async e => { e.preventDefault(); try { await login(username, password); setAuthenticated(true); } catch (x) { setLoginError(x.message); } }}><h2>Sign in</h2><input value={username} onChange={e => setUsername(e.target.value)} placeholder="Username" /><input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" /><button type="submit">Login</button>{loginError && <p>{loginError}</p>}</form></main>;
   if (error) return <main className="center"><div className="error"><h2>Unable to load documents</h2><p>{error}</p><p>Confirm Azure login/RBAC and the storage environment variables.</p></div></main>;
   if (!pages.length) return <main className="center">{loading ? "Loading Azure Storage…" : "No generated content.md files were found."}</main>;
   return <div className="app">
-    <header><div><h1>Azure Markdown Page Review</h1><p>{current?.id}</p></div><div className={`badge ${decision?.decision?.toLowerCase()}`}>{decision?.decision || "NOT REVIEWED"}</div></header>
+    <header><div><h1>Azure Markdown Page Review</h1><p>{current?.id}</p></div><button onClick={() => { logout(); setAuthenticated(false); }}>Logout</button><div className={`badge ${decision?.decision?.toLowerCase()}`}>{decision?.decision || "NOT REVIEWED"}</div></header>
     <nav><select value={current.bookId} onChange={e => choose(e.target.value)}>{books.map(x => <option key={x}>{x}</option>)}</select><select value={current.chapterId} onChange={e => choose(current.bookId, e.target.value)}>{chapters.map(x => <option key={x}>{x}</option>)}</select><button disabled={selected === 0} onClick={() => setSelected(selected - 1)}>← Previous</button><span>{selected + 1} / {pages.length}</span><button disabled={selected === pages.length - 1} onClick={() => setSelected(selected + 1)}>Next →</button></nav>
     <div className="modes"><button className={mode === "compare" ? "active" : ""} onClick={() => setMode("compare")}>Original + Markdown</button><button className={mode === "markdown" ? "active" : ""} onClick={() => setMode("markdown")}>Markdown</button><button className={mode === "layout" ? "active" : ""} onClick={() => setMode("layout")}>Layout reconstruction</button><label><input type="checkbox" checked={showBoxes} onChange={e => setShowBoxes(e.target.checked)} /> Layout boxes</label></div>
     {loading || !page ? <main className="center">Loading page…</main> : <main className={`viewer mode-${mode}`}>
