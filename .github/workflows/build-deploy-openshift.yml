@@ -100,9 +100,6 @@ jobs:
           tags: |
             ${{ env.IMAGE }}:${{ github.sha }}
             ${{ env.IMAGE }}:${{ inputs.environment }}-latest
-          labels: |
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
 
       - name: Install OpenShift CLI
         uses: redhat-actions/openshift-tools-installer@v1
@@ -148,8 +145,12 @@ jobs:
       - name: Deploy OpenShift resources
         run: |
           set -euo pipefail
+
           oc apply -f openshift/service-route.yaml
           oc apply -f openshift/deployment.yaml
+
+          oc set env deployment/"$APP_NAME" \
+            SECURITY_AUTH_URL="$SECURITY_AUTH_URL"
 
       - name: Set deployment image
         run: |
@@ -164,6 +165,11 @@ jobs:
 
           oc rollout status deployment/"$APP_NAME" \
             --timeout=180s
+
+          oc exec deployment/"$APP_NAME" -- \
+            sh -c 'test -n "$SECURITY_AUTH_URL"'
+
+          echo "Running pod contains SECURITY_AUTH_URL."
 
       - name: Display deployment status
         run: |
@@ -227,9 +233,6 @@ jobs:
           fi
 
           jq . pages-response.json
-
-          PAGE_COUNT="$(jq -r '.pages | length' pages-response.json)"
-          echo "Discovered page count: $PAGE_COUNT"
 
       - name: Upload deployment diagnostics
         if: always()
