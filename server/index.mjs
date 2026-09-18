@@ -8,7 +8,9 @@ const app = express();
 const port = Number(process.env.PORT || 8080);
 app.disable("x-powered-by");
 app.use(express.json({ limit: "64kb" }));
-const sessions = new Set();
+// Local reviewer tokens map to the JWT issued by security-api.  The browser
+// never needs to handle the security-api JWT directly.
+const sessions = new Map();
 const securityAuthUrl = (process.env.SECURITY_AUTH_URL || "").replace(/\/$/, "");
 app.post("/api/auth/login", async (req, res, next) => {
   const { username, password } = req.body || {};
@@ -17,7 +19,7 @@ app.post("/api/auth/login", async (req, res, next) => {
     const upstream = await fetch(`${securityAuthUrl}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ email: username, password }) });
     const body = await upstream.json().catch(() => ({}));
     if (!upstream.ok || !body.accessToken) return res.status(upstream.status === 401 ? 401 : 502).json({ error: body.message || body.error || "Security login failed" });
-    const token = crypto.randomBytes(32).toString("hex"); sessions.add(token);
+    const token = crypto.randomBytes(32).toString("hex"); sessions.set(token, body.accessToken);
     res.json({ accessToken: token, username, user: body.user });
   } catch (error) { next(error); }
 });
@@ -36,10 +38,47 @@ app.use((req, res, next) => {
   return sessions.has(token) ? next() : res.status(401).json({ error: "Authentication required" });
 });
 
+function reviewerToken(req) {
+  return String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+}
+
+async function securityJson(req, path) {
+  const securityToken = sessions.get(reviewerToken(req));
+  if (!securityToken) throw Object.assign(new Error("Authentication required"), { statusCode: 401 });
+  const response = await fetch(`${securityAuthUrl}${path}`, {
+    headers: { Accept: "application/json", Authorization: `Bearer ${securityToken}` }
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw Object.assign(new Error(body.message || body.error || "Security API request failed"), { statusCode: response.status });
+  return body;
+}
+
 app.get("/api/health", (_req, res) => res.json({ status: "UP" }));
 app.get("/api/pages", async (_req, res, next) => {
   try { res.json({ outputPrefix: configuredPrefix(), pages: await listPages() }); }
   catch (error) { next(error); }
+});
+
+// Read-only proxy endpoints for the first step of upload review.  Keeping
+// these behind the reviewer session avoids exposing the security-api JWT or
+// requiring browser CORS configuration.
+app.get("/api/review/users", async (req, res, next) => {
+  try { res.json(await securityJson(req, "/api/users")); } catch (error) { next(error); }
+});
+app.get("/api/review/users/:userId/upload-sessions", async (req, res, next) => {
+  try { res.json(await securityJson(req, `/api/users/${encodeURIComponent(req.params.userId)}/upload-sessions`)); } catch (error) { next(error); }
+});
+app.get("/api/review/users/:userId/upload-sessions/:sessionId/folders", async (req, res, next) => {
+  try {
+    const body = await securityJson(req, `/api/users/${encodeURIComponent(req.params.userId)}/upload-sessions/${encodeURIComponent(req.params.sessionId)}/folders`);
+    const images = Array.isArray(body.images) ? body.images : [];
+    const folders = [...new Set(images.map(image => {
+      const path = String(image.relativePath || image.name || "");
+      const slash = path.lastIndexOf("/");
+      return slash > 0 ? path.slice(0, slash) : "";
+    }).filter(Boolean))].sort();
+    res.json({ ...body, folders });
+  } catch (error) { next(error); }
 });
 
 app.get("/api/page", async (req, res, next) => {

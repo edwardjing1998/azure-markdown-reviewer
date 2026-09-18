@@ -15,3 +15,6 @@ export async function getJson(url) {
 
 export const loadPages = () => getJson("/api/pages");
 export const loadPage = markdownBlob => getJson(`/api/page?markdownBlob=${encodeURIComponent(markdownBlob)}`);
+export const loadReviewUsers = () => getJson("/api/review/users");
+export const loadReviewSessions = userId => getJson(`/api/review/users/${encodeURIComponent(userId)}/upload-sessions`);
+export const loadReviewFolders = (userId, sessionId) => getJson(`/api/review/users/${encodeURIComponent(userId)}/upload-sessions/${encodeURIComponent(sessionId)}/folders`);
