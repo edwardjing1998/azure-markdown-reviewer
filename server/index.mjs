@@ -88,14 +88,16 @@ app.get("/api/review/users/:userId/upload-sessions/:sessionId/folder-content", a
     const normalize = value => String(value || "").replace(/^\/+/, "").replace(/^generated\//, "").replace(/^source\//, "");
     const folderKey = normalize(folder);
     const pages = [];
+    const candidates = [];
     for (const candidate of await listPages()) {
       const markdown = await downloadText(candidate.markdownBlob);
       const sourceBlob = markdown.match(/^---[\s\S]*?^sourceBlob:\s*["']?([^"'\n]+)["']?\s*$/m)?.[1] || "";
       const pageKey = normalize(candidate.id);
       const sourceKey = normalize(sourceBlob);
+      candidates.push({ id: candidate.id, markdownBlob: candidate.markdownBlob, sourceBlob, normalizedPagePath: pageKey, normalizedSourcePath: sourceKey });
       if (pageKey === folderKey || pageKey.startsWith(`${folderKey}/`) || sourceKey === folderKey || sourceKey.startsWith(`${folderKey}/`)) pages.push(candidate);
     }
-    res.json({ ...body, folder, pages });
+    res.json({ ...body, folder, normalizedFolder: folderKey, uploadedRelativePaths: (body.images || []).map(image => image.relativePath || image.name || ""), pages, candidates });
   } catch (error) { next(error); }
 });
 
