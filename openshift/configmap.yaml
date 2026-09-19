@@ -7,3 +7,4 @@ data:
   AZURE_STORAGE_ENDPOINT: "https://chat8gpteducationaccount.blob.core.windows.net"
   AZURE_STORAGE_CONTAINER: "education"
   AZURE_STORAGE_OUTPUT_PREFIX: "generated/"
+  SECURITY_AUTH_URL: "https://security-ui-chat8gpt20180625-dev.apps.rm1.0a51.p1.openshiftapps.com"
