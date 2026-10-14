@@ -8,6 +8,7 @@ import {
   downloadBlob,
   downloadText,
   listPages,
+  sourceBlobExists,
 } from "./storage.mjs";
 
 const app = express();
@@ -375,6 +376,48 @@ app.get(
   },
 );
 
+// Use the generated page location to resolve incomplete historical sourceBlob
+// values. Every candidate is checked in Azure Storage before it is returned.
+function buildSourceCandidates(declaredSourceBlob, markdownBlob) {
+  const candidates = [];
+  const add = (value) => {
+    if (value && !candidates.includes(value)) candidates.push(value);
+  };
+
+  const declared = String(declaredSourceBlob || "").trim()
+    .replace(/^['"]|['"]$/g, "")
+    .replace(/^\/+/, "");
+  const segments = markdownBlob.split("/").filter(Boolean);
+  const generatedAt = segments.indexOf("generated");
+  const pathParts = generatedAt === -1 ? [] : segments.slice(generatedAt + 1, -1);
+  const [book, chapter, ...pageParts] = pathParts;
+  const page = pageParts.join("/");
+  const filename = declared.split("/").pop() || "";
+  const ext = filename.match(/\.(png|jpg|jpeg|webp|pdf)$/i)?.[0];
+  const extensions = ext ? [ext] : [".png", ".jpg", ".jpeg", ".pdf"];
+
+  if (book && chapter && page) {
+    for (const suffix of extensions) {
+      add(`source/${book}/${chapter}/${page}${suffix}`);
+      // Legacy pipelines sometimes used page01 instead of page-01.
+      const compact = page.replace(/page-(\d+)/gi, "page$1");
+      if (compact !== page) add(`source/${book}/${chapter}/${compact}${suffix}`);
+    }
+    if (filename) add(`source/${book}/${chapter}/${filename}`);
+  }
+
+  // Keep the exact recorded path as a fallback only if it actually exists.
+  if (declared.startsWith("source/")) add(declared);
+  return candidates;
+}
+
+async function resolveSourceBlob(declaredSourceBlob, markdownBlob) {
+  for (const candidate of buildSourceCandidates(declaredSourceBlob, markdownBlob)) {
+    if (await sourceBlobExists(candidate)) return candidate;
+  }
+  return null;
+}
+
 app.get("/api/page", async (req, res, next) => {
   try {
     const markdownBlob = assertAllowedBlob(
@@ -405,10 +448,15 @@ app.get("/api/page", async (req, res, next) => {
       ? JSON.parse(layoutText)
       : null;
 
-    const sourceBlob =
+    const declaredSourceBlob =
       markdown.match(
         /^---[\s\S]*?^sourceBlob:\s*["']?([^"'\n]+)["']?\s*$/m,
       )?.[1] || null;
+
+    const sourceBlob = await resolveSourceBlob(
+      declaredSourceBlob,
+      markdownBlob,
+    );
 
     const imageLinks = [
       ...markdown.matchAll(
@@ -432,6 +480,7 @@ app.get("/api/page", async (req, res, next) => {
       markdownBlob,
       markdown,
       layout,
+      declaredSourceBlob,
       sourceBlob,
       sourceUrl: sourceBlob
         ? `/api/source-blob?name=${encodeURIComponent(

@@ -9,22 +9,33 @@ function reviewKey(id) { return `markdown-review:${id}`; }
 function isPdfPath(value = "") { return /\.pdf(?:$|[?#])/i.test(value); }
 function fileNameFor(image) { return image.name || image.originalFileName || image.relativePath || ""; }
 function sourceBlobUrl(image) {
+  // Backend-provided reviewed source URL takes priority when available.
   if (image.reviewUrl) return image.reviewUrl;
-  const rawUrl = image.blobUrl || image.url;
-  if (!rawUrl) return "";
-  try {
-    const url = new URL(rawUrl);
-    const marker = "/education/";
-    const index = url.pathname.indexOf(marker);
-    if (index >= 0) {
-      const blobName = decodeURIComponent(url.pathname.slice(index + marker.length));
-      return `/api/source-blob?name=${encodeURIComponent(blobName)}`;
-    }
-  } catch {
-    // Fall back to the stored relative path below.
+  if (image.sourceBlob?.startsWith("source/")) {
+    return `/api/source-blob?name=${encodeURIComponent(image.sourceBlob)}`;
   }
-  const relativePath = image.relativePath || image.name || image.originalFileName;
-  return relativePath ? `/api/source-blob?name=${encodeURIComponent(relativePath)}` : "";
+  const rawUrl = image.blobUrl || image.url;
+  if (rawUrl) {
+    try {
+      const url = new URL(rawUrl);
+      const marker = "/education/";
+      const index = url.pathname.indexOf(marker);
+      if (index >= 0) {
+        const blobName = decodeURIComponent(url.pathname.slice(index + marker.length));
+        if (blobName.startsWith("source/") && !blobName.includes("..")) {
+          return `/api/source-blob?name=${encodeURIComponent(blobName)}`;
+        }
+      }
+    } catch {
+      // Use only an explicit full relative blob path below.
+    }
+  }
+  const relativePath = image.relativePath || "";
+  if (relativePath.startsWith("source/") && !relativePath.includes("..")) {
+    return `/api/source-blob?name=${encodeURIComponent(relativePath)}`;
+  }
+  // A basename alone is not enough to identify the Azure Blob.
+  return "";
 }
 
 function FilePreview({ url, name, className = "" }) {

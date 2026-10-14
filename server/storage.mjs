@@ -126,6 +126,14 @@ export async function downloadText(
   }
 }
 
+// Verify candidates within the source/ namespace before publishing preview URLs.
+export async function sourceBlobExists(name) {
+  if (!name || !name.startsWith("source/") || name.includes("..") || name.includes("\\")) {
+    return false;
+  }
+  return container.getBlobClient(name).exists();
+}
+
 export async function downloadBlob(
   name,
   allowSource = false,
